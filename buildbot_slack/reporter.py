@@ -13,6 +13,24 @@ from buildbot.util.logger import Logger
 logger = Logger()
 
 DEFAULT_HOST = "https://hooks.slack.com"
+STATUS_EMOJIS = {
+    "success": ":sunglassses:",
+    "warnings": ":meow_wow:",
+    "failure": ":skull:",
+    "skipped": ":slam:",
+    "exception": ":skull:",
+    "retry": ":facepalm:",
+    "cancelled": ":slam:",
+}
+STATUS_COLORS = {
+    "success": "#36a64f",
+    "warnings": "#fc8c03",
+    "failure": "#fc0303",
+    "skipped": "#fc8c03",
+    "exception": "#fc0303",
+    "retry": "#fc8c03",
+    "cancelled": "#fc8c03",
+}
 
 
 class SlackStatusPush(http.HttpStatusPushBase):
@@ -46,24 +64,74 @@ class SlackStatusPush(http.HttpStatusPushBase):
         self.project_ids = {}
 
     @defer.inlineCallbacks
+    def getAttachments(self, build, key):
+        sourcestamps = build["buildset"]["sourcestamps"]
+        attachments = []
+
+        for sourcestamp in sourcestamps:
+            sha = sourcestamp["revision"]
+            if sha is None:
+                # No special revision for this, so ignore it
+                continue
+            message = []
+            project = sourcestamp["project"]
+            if project:
+                message.append(
+                    "Build for {project} {sha}".format(project=project, sha=sha)
+                )
+            message.append(
+                "Status: *{status}*\nBuild details: {url}".format(
+                    status=statusToString(build["results"]), url=build["url"]
+                )
+            )
+
+            fields = []
+            branch_name = sourcestamp["branch"]
+            if branch_name:
+                fields.append({"title": "Branch", "value": branch_name, "short": True})
+            repositories = sourcestamp["repository"]
+            if repositories:
+                fields.append(
+                    {"title": "Repository", "value": repositories, "short": True}
+                )
+            responsible_users = yield utils.getResponsibleUsersForBuild(self.master, build["buildid"])
+            if responsible_users:
+                fields.append(
+                    {"title": "Commiters", "value": ", ".join(responsible_users), "short": True}
+                )
+            attachments.append(
+                {
+                    "text": "\n".join(message),
+                    "color": STATUS_COLORS.get(statusToString(build["results"]), ""),
+                    "mrkdwn_in": ["text", "title", "fallback"],
+                    "fields": fields,
+                }
+            )
+        return attachments
+
+    @defer.inlineCallbacks
     def getBuildDetailsAndSendMessage(self, build, key):
         yield utils.getDetailsForBuild(self.master, build, **self.neededDetails)
         text = yield self.getMessage(build, key)
         postData = {"text": text}
+        attachments = yield self.getAttachments(build, key)
+        if attachments:
+            postData["attachments"] = attachments
+        if self.channel:
+            postData["channel"] = self.channel
+
+        postData["icon_emoji"] = STATUS_EMOJIS.get(
+            statusToString(build["results"]), ":facepalm:"
+        )
         extra_params = yield self.getExtraParams(build, key)
         postData.update(extra_params)
         return postData
 
     def getMessage(self, build, event_name):
         event_messages = {
-            "new": "Buildbot started build %s here: %s"
-            % (build["builder"]["name"], build["url"]),
-            "finished": "Buildbot finished build %s with result %s here: %s"
-            % (
-                build["builder"]["name"],
-                statusToString(build["results"]),
-                build["url"],
-            ),
+            "new": "Buildbot started build %s" % build["builder"]["name"],
+            "finished": "Buildbot finished build %s with result: %s"
+            % (build["builder"]["name"], statusToString(build["results"])),
         }
         return event_messages.get(event_name, "")
 
