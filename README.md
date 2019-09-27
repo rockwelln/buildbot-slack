@@ -3,9 +3,11 @@
 Buildbot plugin to publish status on Slack
 ==========================================
 
-This Buildbot plugin sends messages to a Slack channel when each build finishes with a handy link to the build results.
+This Buildbot plugin sends messages to a Slack channel when each build starts / finishes with a handy link to the build results.
 
-This plugin is based on many other reporter plugins made for Slack ; Contributions are welcome!
+This plugin is based on many other reporter plugins made for Slack
+
+Contributions are welcome!
 
 ## Install
 
@@ -22,15 +24,16 @@ Create a new incoming webhook in your slack account. (see https://api.slack.com/
 Then in your master.cfg, add the following:
 
 ```
+from buildbot import reporters
 c['services'].append(reporters.SlackStatusPush(
-    endpoint="/services/<YOUR_WEBHOOK_ENDPOINT>",
+    endpoint=<YOUR_WEBHOOK_ENDPOINT>,
 ))
 ```
 
 ### Additional Options:
 ```
   channel = None
-  host_url = "https://hooks.slack.com"
+  username = None
 ```
 
 Have fun!

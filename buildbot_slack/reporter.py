@@ -12,7 +12,6 @@ from buildbot.util.logger import Logger
 
 logger = Logger()
 
-DEFAULT_HOST = "https://hooks.slack.com"
 STATUS_EMOJIS = {
     "success": ":sunglassses:",
     "warnings": ":meow_wow:",
@@ -37,28 +36,28 @@ class SlackStatusPush(http.HttpStatusPushBase):
     name = "SlackStatusPush"
     neededDetails = dict(wantProperties=True)
 
-    def checkConfig(self, endpoint, channel=None, host_url=None, **kwargs):
+    def checkConfig(self, endpoint, channel=None, username=None, **kwargs):
         if not isinstance(endpoint, str):
             endpoint.error("endpoint must be a string")
-        elif not endpoint.startswith("/"):
-            endpoint.error('endpoint should start with "/"')
+        elif not endpoint.startswith("http"):
+            endpoint.error('endpoint should start with "http..."')
         if channel and not isinstance(channel, str):
             channel.error("channel must be a string")
-        if host_url and not isinstance(host_url, str):
-            host_url.error("host_url must be a string")
+        if username and not isinstance(username, str):
+            username.error("username must be a string")
 
     @defer.inlineCallbacks
     def reconfigService(
-        self, endpoint, channel=None, host_url=DEFAULT_HOST, verbose=False, **kwargs
+        self, endpoint, channel=None, username=None, verbose=False, **kwargs
     ):
 
         yield super().reconfigService(**kwargs)
 
-        self.baseURL = host_url.rstrip("/")
         self.endpoint = endpoint
         self.channel = channel
+        self.username = username
         self._http = yield httpclientservice.HTTPClientService.getService(
-            self.master, self.baseURL, debug=self.debug, verify=self.verify
+            self.master, self.endpoint, debug=self.debug, verify=self.verify
         )
         self.verbose = verbose
         self.project_ids = {}
@@ -73,17 +72,10 @@ class SlackStatusPush(http.HttpStatusPushBase):
             if sha is None:
                 # No special revision for this, so ignore it
                 continue
-            message = []
+            title = "Build #{buildid}".format(buildid=build["buildid"])
             project = sourcestamp["project"]
             if project:
-                message.append(
-                    "Build for {project} {sha}".format(project=project, sha=sha)
-                )
-            message.append(
-                "Status: *{status}*\nBuild details: {url}".format(
-                    status=statusToString(build["results"]), url=build["url"]
-                )
-            )
+                title += " for {project} {sha}".format(project=project, sha=sha)
 
             fields = []
             branch_name = sourcestamp["branch"]
@@ -94,14 +86,25 @@ class SlackStatusPush(http.HttpStatusPushBase):
                 fields.append(
                     {"title": "Repository", "value": repositories, "short": True}
                 )
-            responsible_users = yield utils.getResponsibleUsersForBuild(self.master, build["buildid"])
+            responsible_users = yield utils.getResponsibleUsersForBuild(
+                self.master, build["buildid"]
+            )
             if responsible_users:
                 fields.append(
-                    {"title": "Commiters", "value": ", ".join(responsible_users), "short": True}
+                    {
+                        "title": "Commiters",
+                        "value": ", ".join(responsible_users),
+                        "short": True,
+                    }
                 )
             attachments.append(
                 {
-                    "text": "\n".join(message),
+                    "title": title,
+                    "title_link": build["url"],
+                    "fallback": "{}: <{}>".format(title, build["url"]),
+                    "text": "Status: *{status}*".format(
+                        status=statusToString(build["results"])
+                    ),
                     "color": STATUS_COLORS.get(statusToString(build["results"]), ""),
                     "mrkdwn_in": ["text", "title", "fallback"],
                     "fields": fields,
@@ -152,9 +155,6 @@ class SlackStatusPush(http.HttpStatusPushBase):
         if not postData:
             return
 
-        props = Properties.fromDict(build["properties"])
-        props.master = self.master
-
         sourcestamps = build["buildset"]["sourcestamps"]
 
         for sourcestamp in sourcestamps:
@@ -165,7 +165,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
 
             logger.info("posting to {url}", url=self.endpoint)
             try:
-                response = yield self._http.post(self.endpoint, json=postData)
+                response = yield self._http.post("", json=postData)
                 if response.code != 200:
                     content = yield response.content()
                     logger.error(
