@@ -69,7 +69,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
 
         yield super().reconfigService(**kwargs)
 
-        self.baseURL = host_url and host_url.rstrip("/")  # deprecated
+        self.baseUrl = host_url and host_url.rstrip("/")  # deprecated
         if host_url:
             logger.warn(
                 "[SlackStatusPush] argument host_url is deprecated and will be removed in the next release: specify the full url as endpoint"
