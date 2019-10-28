@@ -99,27 +99,36 @@ class SlackStatusPush(http.HttpStatusPushBase):
             project = sourcestamp["project"]
             if project:
                 title += " for {project} {sha}".format(project=project, sha=sha)
+            sub_build = bool(build["buildset"]["parent_buildid"])
+            if sub_build:
+                title += " {relationship}: #{parent_build_id}".format(
+                    relationship=build["buildset"]["parent_relationship"],
+                    parent_build_id=build["buildset"]["parent_buildid"],
+                )
 
             fields = []
-            branch_name = sourcestamp["branch"]
-            if branch_name:
-                fields.append({"title": "Branch", "value": branch_name, "short": True})
-            repositories = sourcestamp["repository"]
-            if repositories:
-                fields.append(
-                    {"title": "Repository", "value": repositories, "short": True}
+            if not sub_build:
+                branch_name = sourcestamp["branch"]
+                if branch_name:
+                    fields.append(
+                        {"title": "Branch", "value": branch_name, "short": True}
+                    )
+                repositories = sourcestamp["repository"]
+                if repositories:
+                    fields.append(
+                        {"title": "Repository", "value": repositories, "short": True}
+                    )
+                responsible_users = yield utils.getResponsibleUsersForBuild(
+                    self.master, build["buildid"]
                 )
-            responsible_users = yield utils.getResponsibleUsersForBuild(
-                self.master, build["buildid"]
-            )
-            if responsible_users:
-                fields.append(
-                    {
-                        "title": "Commiters",
-                        "value": ", ".join(responsible_users),
-                        "short": True,
-                    }
-                )
+                if responsible_users:
+                    fields.append(
+                        {
+                            "title": "Commiters",
+                            "value": ", ".join(responsible_users),
+                            "short": True,
+                        }
+                    )
             attachments.append(
                 {
                     "title": title,
