@@ -62,6 +62,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
         channel=None,
         host_url=None,  # deprecated
         username=None,
+        attachments=True,
         verbose=False,
         **kwargs
     ):
@@ -76,6 +77,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
         self.endpoint = endpoint
         self.channel = channel
         self.username = username
+        self.attachments = attachments
         self._http = yield httpclientservice.HTTPClientService.getService(
             self.master,
             self.baseUrl or self.endpoint,
@@ -148,10 +150,15 @@ class SlackStatusPush(http.HttpStatusPushBase):
     def getBuildDetailsAndSendMessage(self, build, key):
         yield utils.getDetailsForBuild(self.master, build, **self.neededDetails)
         text = yield self.getMessage(build, key)
-        postData = {"text": text}
-        attachments = yield self.getAttachments(build, key)
-        if attachments:
-            postData["attachments"] = attachments
+        postData = {}
+        if self.attachments:
+            attachments = yield self.getAttachments(build, key)
+            if attachments:
+                postData["attachments"] = attachments
+        else:
+            text += " here: " + build["url"]
+        postData["text"] = text
+
         if self.channel:
             postData["channel"] = self.channel
 
