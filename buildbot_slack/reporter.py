@@ -30,13 +30,16 @@ STATUS_COLORS = {
     "retry": "#fc8c03",
     "cancelled": "#fc8c03",
 }
+DEFAULT_HOST = "https://hooks.slack.com"  # deprecated
 
 
 class SlackStatusPush(http.HttpStatusPushBase):
     name = "SlackStatusPush"
     neededDetails = dict(wantProperties=True)
 
-    def checkConfig(self, endpoint, channel=None, username=None, **kwargs):
+    def checkConfig(
+        self, endpoint, channel=None, host_url=None, username=None, **kwargs
+    ):
         if not isinstance(endpoint, str):
             endpoint.error("endpoint must be a string")
         elif not endpoint.startswith("http"):
@@ -45,19 +48,39 @@ class SlackStatusPush(http.HttpStatusPushBase):
             channel.error("channel must be a string")
         if username and not isinstance(username, str):
             username.error("username must be a string")
+        if host_url and not isinstance(host_url, str):  # deprecated
+            host_url.error("host_url must be a string")
+        elif host_url:
+            logger.warn(
+                "[SlackStatusPush] argument host_url is deprecated and will be removed in the next release: specify the full url as endpoint"
+            )
 
     @defer.inlineCallbacks
     def reconfigService(
-        self, endpoint, channel=None, username=None, verbose=False, **kwargs
+        self,
+        endpoint,
+        channel=None,
+        host_url=None,  # deprecated
+        username=None,
+        verbose=False,
+        **kwargs
     ):
 
         yield super().reconfigService(**kwargs)
 
+        self.baseURL = host_url and host_url.rstrip("/")  # deprecated
+        if host_url:
+            logger.warn(
+                "[SlackStatusPush] argument host_url is deprecated and will be removed in the next release: specify the full url as endpoint"
+            )
         self.endpoint = endpoint
         self.channel = channel
         self.username = username
         self._http = yield httpclientservice.HTTPClientService.getService(
-            self.master, self.endpoint, debug=self.debug, verify=self.verify
+            self.master,
+            self.baseUrl or self.endpoint,
+            debug=self.debug,
+            verify=self.verify,
         )
         self.verbose = verbose
         self.project_ids = {}
@@ -165,7 +188,11 @@ class SlackStatusPush(http.HttpStatusPushBase):
 
             logger.info("posting to {url}", url=self.endpoint)
             try:
-                response = yield self._http.post("", json=postData)
+                if self.baseUrl:
+                    # deprecated
+                    response = yield self._http.post(self.endpoint, json=postData)
+                else:
+                    response = yield self._http.post("", json=postData)
                 if response.code != 200:
                     content = yield response.content()
                     logger.error(
