@@ -94,9 +94,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
 
         for sourcestamp in sourcestamps:
             sha = sourcestamp["revision"]
-            if sha is None:
-                # No special revision for this, so ignore it
-                continue
+
             title = "Build #{buildid}".format(buildid=build["buildid"])
             project = sourcestamp["project"]
             if project:
@@ -199,8 +197,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
         for sourcestamp in sourcestamps:
             sha = sourcestamp["revision"]
             if sha is None:
-                # No special revision for this, so ignore it
-                continue
+                logger.info("no special revision for this")
 
             logger.info("posting to {url}", url=self.endpoint)
             try:

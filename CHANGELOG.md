@@ -1,3 +1,8 @@
+version 0.2.1
+-------------
+
+- [issue #1] allow notification even if there is no source stamp (handle alwaysUseLatest)
+
 version 0.2.0
 -------------
 
