@@ -1,3 +1,8 @@
+version 0.2.3
+-------------
+
+- [issue #4 and #6] fix setup requirements
+
 version 0.2.1
 -------------
 
