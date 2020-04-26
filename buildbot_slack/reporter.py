@@ -41,17 +41,32 @@ class SlackStatusPush(http.HttpStatusPushBase):
         self, endpoint, channel=None, host_url=None, username=None, **kwargs
     ):
         if not isinstance(endpoint, str):
-            endpoint.error("endpoint must be a string")
+            logger.warning(
+                "[SlackStatusPush] endpoint should be a string, got '%s' instead",
+                type(endpoint).__name__,
+            )
         elif not endpoint.startswith("http"):
-            endpoint.error('endpoint should start with "http..."')
+            logger.warning(
+                '[SlackStatusPush] endpoint should start with "http...", endpoint: %s',
+                endpoint,
+            )
         if channel and not isinstance(channel, str):
-            channel.error("channel must be a string")
+            logger.warning(
+                "[SlackStatusPush] channel must be a string, got '%s' instead",
+                type(channel).__name__,
+            )
         if username and not isinstance(username, str):
-            username.error("username must be a string")
+            logger.warning(
+                "[SlackStatusPush] username must be a string, got '%s' instead",
+                type(username).__name__,
+            )
         if host_url and not isinstance(host_url, str):  # deprecated
-            host_url.error("host_url must be a string")
+            logger.warning(
+                "[SlackStatusPush] host_url must be a string, got '%s' instead",
+                type(host_url).__name__,
+            )
         elif host_url:
-            logger.warn(
+            logger.warning(
                 "[SlackStatusPush] argument host_url is deprecated and will be removed in the next release: specify the full url as endpoint"
             )
 
@@ -71,7 +86,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
 
         self.baseUrl = host_url and host_url.rstrip("/")  # deprecated
         if host_url:
-            logger.warn(
+            logger.warning(
                 "[SlackStatusPush] argument host_url is deprecated and will be removed in the next release: specify the full url as endpoint"
             )
         self.endpoint = endpoint
