@@ -1,3 +1,8 @@
+version 0.2.4
+-------------
+
+- [issue #8] fix checkConfig and make it more permissive
+
 version 0.2.3
 -------------
 
