@@ -25,7 +25,7 @@ Create a new incoming webhook in your slack account. (see https://api.slack.com/
 Then in your master.cfg, add the following:
 
 ```
-from buildbot import reporters
+from buildbot.plugins import reporters
 c['services'].append(reporters.SlackStatusPush(
     endpoint=<YOUR_WEBHOOK_ENDPOINT>,
 ))
