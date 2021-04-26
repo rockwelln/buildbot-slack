@@ -139,7 +139,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
                 if responsible_users:
                     fields.append(
                         {
-                            "title": "Commiters",
+                            "title": "Committers",
                             "value": ", ".join(responsible_users),
                             "short": True,
                         }
