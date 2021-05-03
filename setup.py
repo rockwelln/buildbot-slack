@@ -16,7 +16,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     packages=["buildbot_slack"],
-    install_requires=["buildbot (>=2.0.0)", "treq (>=18.6)"],
+    install_requires=["buildbot (>=2.0.0)", "treq (==18.6)"],
     entry_points={
         "buildbot.reporters": [
             "SlackStatusPush = buildbot_slack.reporter:SlackStatusPush"
