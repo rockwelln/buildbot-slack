@@ -1,21 +1,20 @@
 # Based on the gitlab reporter from buildbot
+from __future__ import absolute_import
+from __future__ import print_function
 
-from __future__ import absolute_import, print_function
-
-from twisted.internet import defer
-
-from buildbot.process.properties import Properties
 from buildbot.process.results import statusToString
-from buildbot.reporters import http, utils
+from buildbot.reporters import utils
+from buildbot.reporters.base import ReporterBase
 from buildbot.util import httpclientservice
 from buildbot.util.logger import Logger
+from twisted.internet import defer
 
 logger = Logger()
 
 STATUS_EMOJIS = {
-    "success": ":sunglassses:",
+    "success": ":white_check_mark:",
     "warnings": ":meow_wow:",
-    "failure": ":skull:",
+    "failure": ":x:",
     "skipped": ":slam:",
     "exception": ":skull:",
     "retry": ":facepalm:",
@@ -30,16 +29,13 @@ STATUS_COLORS = {
     "retry": "#fc8c03",
     "cancelled": "#fc8c03",
 }
-DEFAULT_HOST = "https://hooks.slack.com"  # deprecated
 
 
-class SlackStatusPush(http.HttpStatusPushBase):
+class SlackStatusPush(ReporterBase):
     name = "SlackStatusPush"
     neededDetails = dict(wantProperties=True)
 
-    def checkConfig(
-        self, endpoint, channel=None, host_url=None, username=None, **kwargs
-    ):
+    def checkConfig(self, endpoint, channel=None, host_url=None, username=None, **kwargs):
         if not isinstance(endpoint, str):
             logger.warning(
                 "[SlackStatusPush] endpoint should be a string, got '%s' instead",
@@ -75,27 +71,29 @@ class SlackStatusPush(http.HttpStatusPushBase):
         self,
         endpoint,
         channel=None,
-        host_url=None,  # deprecated
         username=None,
         attachments=True,
         verbose=False,
-        **kwargs
+        generators=None,
+        debug=None,
+        verify=None,
+        **kwargs,
     ):
+        self.debug = debug
+        self.verify = verify
 
-        yield super().reconfigService(**kwargs)
+        if generators is None:
+            generators = self._create_default_generators()
 
-        self.baseUrl = host_url and host_url.rstrip("/")  # deprecated
-        if host_url:
-            logger.warning(
-                "[SlackStatusPush] argument host_url is deprecated and will be removed in the next release: specify the full url as endpoint"
-            )
+        yield super().reconfigService(generators=generators, **kwargs)
+
         self.endpoint = endpoint
         self.channel = channel
         self.username = username
         self.attachments = attachments
         self._http = yield httpclientservice.HTTPClientService.getService(
             self.master,
-            self.baseUrl or self.endpoint,
+            self.endpoint,
             debug=self.debug,
             verify=self.verify,
         )
@@ -103,7 +101,7 @@ class SlackStatusPush(http.HttpStatusPushBase):
         self.project_ids = {}
 
     @defer.inlineCallbacks
-    def getAttachments(self, build, key):
+    def getAttachments(self, build):
         sourcestamps = build["buildset"]["sourcestamps"]
         attachments = []
 
@@ -125,17 +123,11 @@ class SlackStatusPush(http.HttpStatusPushBase):
             if not sub_build:
                 branch_name = sourcestamp["branch"]
                 if branch_name:
-                    fields.append(
-                        {"title": "Branch", "value": branch_name, "short": True}
-                    )
+                    fields.append({"title": "Branch", "value": branch_name, "short": True})
                 repositories = sourcestamp["repository"]
                 if repositories:
-                    fields.append(
-                        {"title": "Repository", "value": repositories, "short": True}
-                    )
-                responsible_users = yield utils.getResponsibleUsersForBuild(
-                    self.master, build["buildid"]
-                )
+                    fields.append({"title": "Repository", "value": repositories, "short": True})
+                responsible_users = yield utils.getResponsibleUsersForBuild(self.master, build["buildid"])
                 if responsible_users:
                     fields.append(
                         {
@@ -144,14 +136,14 @@ class SlackStatusPush(http.HttpStatusPushBase):
                             "short": True,
                         }
                     )
+                builder_name = build["builder"]["name"]
+                fields.append({"title": "Builder", "value": builder_name, "short": True})
             attachments.append(
                 {
                     "title": title,
                     "title_link": build["url"],
                     "fallback": "{}: <{}>".format(title, build["url"]),
-                    "text": "Status: *{status}*".format(
-                        status=statusToString(build["results"])
-                    ),
+                    "text": "Status: *{status}*".format(status=statusToString(build["results"])),
                     "color": STATUS_COLORS.get(statusToString(build["results"]), ""),
                     "mrkdwn_in": ["text", "title", "fallback"],
                     "fields": fields,
@@ -160,35 +152,29 @@ class SlackStatusPush(http.HttpStatusPushBase):
         return attachments
 
     @defer.inlineCallbacks
-    def getBuildDetailsAndSendMessage(self, build, key):
-        yield utils.getDetailsForBuild(self.master, build, **self.neededDetails)
-        text = yield self.getMessage(build, key)
+    def getBuildDetailsAndSendMessage(self, report):
+        build = report["builds"][0]
+        text = yield self.getMessage(report)
         postData = {}
         if self.attachments:
-            attachments = yield self.getAttachments(build, key)
+            attachments = yield self.getAttachments(build)
             if attachments:
                 postData["attachments"] = attachments
         else:
-            text += " here: " + build["url"]
+            text += "\n here: " + build["url"]
         postData["text"] = text
 
         if self.channel:
             postData["channel"] = self.channel
 
-        postData["icon_emoji"] = STATUS_EMOJIS.get(
-            statusToString(build["results"]), ":facepalm:"
-        )
-        extra_params = yield self.getExtraParams(build, key)
+        extra_params = yield self.getExtraParams(build)
         postData.update(extra_params)
         return postData
 
-    def getMessage(self, build, event_name):
-        event_messages = {
-            "new": "Buildbot started build %s" % build["builder"]["name"],
-            "finished": "Buildbot finished build %s with result: %s"
-            % (build["builder"]["name"], statusToString(build["results"])),
-        }
-        return event_messages.get(event_name, "")
+    def getMessage(self, report):
+        build = report["builds"][0]
+        emoji = STATUS_EMOJIS.get(statusToString(build["results"]), ":hourglass_flowing_sand:")
+        return f"{emoji} {report['body']}"
 
     # returns a Deferred that returns None
     def buildStarted(self, key, build):
@@ -198,12 +184,18 @@ class SlackStatusPush(http.HttpStatusPushBase):
     def buildFinished(self, key, build):
         return self.send(build, key[2])
 
-    def getExtraParams(self, build, event_name):
+    def getExtraParams(self, build):
         return {}
 
     @defer.inlineCallbacks
-    def send(self, build, key):
-        postData = yield self.getBuildDetailsAndSendMessage(build, key)
+    def sendMessage(self, reports):
+        # We only use the first report, even if multiple are passed
+        report = reports[0]
+        print(report)
+        # We also only report on the first build, even if multiple are present
+        build = report["builds"][0]
+        print(report["builds"])
+        postData = yield self.getBuildDetailsAndSendMessage(report)
         if not postData:
             return
 
@@ -216,11 +208,8 @@ class SlackStatusPush(http.HttpStatusPushBase):
 
             logger.info("posting to {url}", url=self.endpoint)
             try:
-                if self.baseUrl:
-                    # deprecated
-                    response = yield self._http.post(self.endpoint, json=postData)
-                else:
-                    response = yield self._http.post("", json=postData)
+                print(postData)
+                response = yield self._http.post("", json=postData)
                 if response.code != 200:
                     content = yield response.content()
                     logger.error(
